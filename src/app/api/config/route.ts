@@ -23,7 +23,9 @@ export async function GET() {
   try {
     const redis = getRedis();
     const config = await redis.get<AssignmentConfig>(CONFIG_KEY);
-    return NextResponse.json({ config: config ?? null });
+    return NextResponse.json({ config: config ?? null }, {
+      headers: { 'Cache-Control': 'no-store' },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[config GET] error:', message);

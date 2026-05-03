@@ -13,14 +13,11 @@ export default function StudentPage() {
   const [feedback, setFeedback] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [pdfFilename, setPdfFilename] = useState('');
-  const [configDebug, setConfigDebug] = useState('');
 
   useEffect(() => {
     fetch('/api/config')
       .then((r) => r.json())
-      .then((data) => {
-        const { config } = data;
-        setConfigDebug(JSON.stringify(data, null, 2));
+      .then(({ config }) => {
         if (config?.prompt?.trim() && config?.rubric?.trim()) {
           setAppState('form');
           if (config.assignmentPdfFilename) setPdfFilename(config.assignmentPdfFilename);
@@ -28,10 +25,7 @@ export default function StudentPage() {
           setAppState('no-config');
         }
       })
-      .catch((err) => {
-        setConfigDebug(`Fetch error: ${err}`);
-        setAppState('no-config');
-      });
+      .catch(() => setAppState('no-config'));
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
