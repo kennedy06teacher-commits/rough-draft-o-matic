@@ -23,6 +23,7 @@ export default function TeacherPage() {
   const [savedConfig, setSavedConfig] = useState<AssignmentConfig | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [saveError, setSaveError] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -83,6 +84,7 @@ export default function TeacherPage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaveState('saving');
+    setSaveError('');
     try {
       const res = await fetch('/api/config', {
         method: 'POST',
@@ -96,9 +98,11 @@ export default function TeacherPage() {
         setTimeout(() => setSaveState('idle'), 2500);
       } else {
         setSaveState('error');
+        setSaveError(data.error || `HTTP ${res.status}`);
       }
-    } catch {
+    } catch (err) {
       setSaveState('error');
+      setSaveError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -316,6 +320,11 @@ export default function TeacherPage() {
                 Clear All
               </button>
             </div>
+            {saveState === 'error' && saveError && (
+              <p className="mt-3 rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-xs text-red-700 font-mono break-all">
+                Error: {saveError}
+              </p>
+            )}
           </form>
         )}
 
