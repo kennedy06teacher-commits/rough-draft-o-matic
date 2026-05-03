@@ -5,11 +5,13 @@ import type { AssignmentConfig } from '@/types/config';
 const CONFIG_KEY = 'assignment_config';
 
 function getRedis() {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  // Vercel's Upstash integration may use either naming convention
+  const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
   if (!url || !token) {
     throw new Error(
-      `Missing Upstash env vars. UPSTASH_REDIS_REST_URL=${url ? 'set' : 'MISSING'}, UPSTASH_REDIS_REST_TOKEN=${token ? 'set' : 'MISSING'}`
+      'Redis credentials not found. In Vercel: Settings → Environment Variables → verify ' +
+      'UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN exist and are enabled for Production.'
     );
   }
   return new Redis({ url, token });

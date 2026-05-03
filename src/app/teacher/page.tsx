@@ -270,7 +270,7 @@ export default function TeacherPage() {
                 </button>
                 {pdfFilename && !pdfUploading && (
                   <span className="text-xs text-slate-500 flex items-center gap-1">
-                    <span>📄</span> {pdfFilename}
+                    <span>📄</span> {pdfFilename.split('/').pop() ?? pdfFilename}
                     <button
                       type="button"
                       onClick={() => setPdfFilename('')}

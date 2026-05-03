@@ -111,7 +111,7 @@ export default function StudentPage() {
           <p className="mt-1 text-slate-500">Paste your draft below and get rubric-based feedback</p>
           {pdfFilename && (
             <a
-              href={`/${pdfFilename}`}
+              href={pdfFilename}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-3 inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 underline"
