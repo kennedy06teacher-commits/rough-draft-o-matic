@@ -7,7 +7,7 @@ import type { AssignmentConfig } from '@/types/config';
 
 type AppState = 'form' | 'generating' | 'complete' | 'error';
 
-export default function StudentPageClient({ config }: { config: AssignmentConfig | null }) {
+export default function StudentPageClient({ config, debugError }: { config: AssignmentConfig | null; debugError?: string }) {
   const [appState, setAppState] = useState<AppState>('form');
   const [studentName, setStudentName] = useState('');
   const [essay, setEssay] = useState('');
@@ -30,6 +30,16 @@ export default function StudentPageClient({ config }: { config: AssignmentConfig
           >
             Teacher login →
           </a>
+          {debugError && (
+            <pre className="mt-4 text-left text-xs bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 break-all whitespace-pre-wrap">
+              {debugError}
+            </pre>
+          )}
+          {!debugError && (
+            <pre className="mt-4 text-left text-xs bg-slate-100 rounded-lg p-3 text-slate-500 break-all whitespace-pre-wrap">
+              config: {JSON.stringify(config)}
+            </pre>
+          )}
         </div>
       </div>
     );
