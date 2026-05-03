@@ -98,11 +98,6 @@ export default function StudentPage() {
           >
             Teacher login →
           </a>
-          {configDebug && (
-            <pre className="mt-6 text-left text-xs bg-slate-100 rounded-lg p-3 text-slate-600 overflow-auto max-h-64">
-              {configDebug}
-            </pre>
-          )}
         </div>
       </div>
     );
