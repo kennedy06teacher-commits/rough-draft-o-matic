@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 import type { AssignmentConfig } from '@/types/config';
 
+export const dynamic = 'force-dynamic';
+
 const CONFIG_KEY = 'assignment_config';
 
 function getRedis() {
