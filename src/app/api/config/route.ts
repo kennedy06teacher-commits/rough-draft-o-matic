@@ -6,8 +6,8 @@ const CONFIG_KEY = 'assignment_config';
 
 function getRedis() {
   // Vercel's Upstash integration may use either naming convention
-  const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  const url = (process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL)?.trim();
+  const token = (process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN)?.trim();
   if (!url || !token) {
     throw new Error(
       'Redis credentials not found. In Vercel: Settings → Environment Variables → verify ' +
