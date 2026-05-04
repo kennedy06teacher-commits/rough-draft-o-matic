@@ -21,5 +21,10 @@ export default async function Page() {
     // isReady stays false
   }
 
-  return <StudentPageClient isReady={isReady} pdfUrl={pdfUrl} />;
+  return (
+    <>
+      <div id="sv" style={{display:'none'}}>SERVER-V3-READY={String(isReady)}</div>
+      <StudentPageClient isReady={isReady} pdfUrl={pdfUrl} />
+    </>
+  );
 }
