@@ -19,7 +19,7 @@ export default function StudentPageClient({ config, debugError }: { config: Assi
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="max-w-md text-center">
           <div className="text-5xl mb-4">📝</div>
-          <h1 className="text-2xl font-bold text-slate-800 mb-2">Not Ready Yet</h1>
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">Not Ready Yet [v2]</h1>
           <p className="text-slate-500">
             Your teacher hasn&apos;t configured the assignment yet. Please check back later or ask
             your teacher to set up the assignment.
