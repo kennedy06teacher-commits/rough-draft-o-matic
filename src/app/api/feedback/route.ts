@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { readFileSync, existsSync } from 'fs';
-import path from 'path';
+import { Redis } from '@upstash/redis';
 import type { AssignmentConfig } from '@/types/config';
 
-const CONFIG_PATH = path.join(process.cwd(), 'data', 'config.json');
+const CONFIG_KEY = 'assignment_config';
 
-function readConfig(): AssignmentConfig | null {
-  try {
-    if (!existsSync(CONFIG_PATH)) return null;
-    return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
-  } catch {
-    return null;
-  }
+function getRedis() {
+  const url = (process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL)?.trim();
+  const token = (process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN)?.trim();
+  if (!url || !token) throw new Error('Missing Redis env vars');
+  return new Redis({ url, token });
 }
 
 const client = new Anthropic();
@@ -24,7 +21,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Name and essay are required.' }, { status: 400 });
   }
 
-  const config = readConfig();
+  let config: AssignmentConfig | null = null;
+  try {
+    const redis = getRedis();
+    config = await redis.get<AssignmentConfig>(CONFIG_KEY);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: `Failed to load config: ${message}` }, { status: 500 });
+  }
+
   if (!config?.prompt?.trim() || !config?.rubric?.trim()) {
     return NextResponse.json(
       { error: 'No assignment configured. Please ask your teacher to set up the assignment.' },
