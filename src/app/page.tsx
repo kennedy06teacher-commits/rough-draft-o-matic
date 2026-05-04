@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis';
 import type { AssignmentConfig } from '@/types/config';
-import StudentPageClient from './StudentPageClient';
+import StudentForm from './StudentForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +21,26 @@ export default async function Page() {
     // isReady stays false
   }
 
-  return (
-    <>
-      <div id="sv" style={{display:'none'}}>SERVER-V3-READY={String(isReady)}</div>
-      <StudentPageClient isReady={isReady} pdfUrl={pdfUrl} />
-    </>
-  );
+  if (!isReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <div className="text-5xl mb-4">📝</div>
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">Not Ready Yet</h1>
+          <p className="text-slate-500">
+            Your teacher hasn&apos;t configured the assignment yet. Please check back later or ask
+            your teacher to set up the assignment.
+          </p>
+          <a
+            href="/teacher"
+            className="mt-6 inline-block text-sm text-indigo-600 hover:text-indigo-800 underline"
+          >
+            Teacher login →
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return <StudentForm pdfUrl={pdfUrl} />;
 }

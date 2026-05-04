@@ -6,33 +6,12 @@ import remarkGfm from 'remark-gfm';
 
 type AppState = 'form' | 'generating' | 'complete' | 'error';
 
-export default function StudentPageClient({ isReady, pdfUrl }: { isReady: boolean; pdfUrl: string }) {
+export default function StudentForm({ pdfUrl }: { pdfUrl: string }) {
   const [appState, setAppState] = useState<AppState>('form');
   const [studentName, setStudentName] = useState('');
   const [essay, setEssay] = useState('');
   const [feedback, setFeedback] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-
-  if (!isReady) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="max-w-md text-center">
-          <div className="text-5xl mb-4">📝</div>
-          <h1 className="text-2xl font-bold text-slate-800 mb-2">Not Ready Yet</h1>
-          <p className="text-slate-500">
-            Your teacher hasn&apos;t configured the assignment yet. Please check back later or ask
-            your teacher to set up the assignment.
-          </p>
-          <a
-            href="/teacher"
-            className="mt-6 inline-block text-sm text-indigo-600 hover:text-indigo-800 underline"
-          >
-            Teacher login →
-          </a>
-        </div>
-      </div>
-    );
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -98,57 +77,55 @@ export default function StudentPageClient({ isReady, pdfUrl }: { isReady: boolea
           )}
         </header>
 
-        {(appState === 'form' || appState === 'generating' || appState === 'complete' || appState === 'error') && (
-          <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="name">
-                Your Name
-              </label>
-              <input
-                id="name"
-                type="text"
-                value={studentName}
-                onChange={(e) => setStudentName(e.target.value)}
-                placeholder="First and last name"
-                required
-                disabled={appState === 'generating'}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:bg-slate-50 disabled:text-slate-400"
-              />
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="name">
+              Your Name
+            </label>
+            <input
+              id="name"
+              type="text"
+              value={studentName}
+              onChange={(e) => setStudentName(e.target.value)}
+              placeholder="First and last name"
+              required
+              disabled={appState === 'generating'}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:bg-slate-50 disabled:text-slate-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="essay">
+              Your Essay Draft
+            </label>
+            <textarea
+              id="essay"
+              value={essay}
+              onChange={(e) => setEssay(e.target.value)}
+              placeholder="Paste your essay draft here..."
+              required
+              rows={12}
+              disabled={appState === 'generating'}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:bg-slate-50 disabled:text-slate-400 resize-y"
+            />
+          </div>
+
+          {appState === 'error' && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              {errorMessage}
             </div>
+          )}
 
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="essay">
-                Your Essay Draft
-              </label>
-              <textarea
-                id="essay"
-                value={essay}
-                onChange={(e) => setEssay(e.target.value)}
-                placeholder="Paste your essay draft here..."
-                required
-                rows={12}
-                disabled={appState === 'generating'}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:bg-slate-50 disabled:text-slate-400 resize-y"
-              />
-            </div>
-
-            {appState === 'error' && (
-              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-                {errorMessage}
-              </div>
-            )}
-
-            {appState !== 'complete' && (
-              <button
-                type="submit"
-                disabled={appState === 'generating' || !studentName.trim() || !essay.trim()}
-                className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-2.5 text-sm transition-colors"
-              >
-                {appState === 'generating' ? 'Generating feedback…' : 'Get Feedback'}
-              </button>
-            )}
-          </form>
-        )}
+          {appState !== 'complete' && (
+            <button
+              type="submit"
+              disabled={appState === 'generating' || !studentName.trim() || !essay.trim()}
+              className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-2.5 text-sm transition-colors"
+            >
+              {appState === 'generating' ? 'Generating feedback…' : 'Get Feedback'}
+            </button>
+          )}
+        </form>
 
         {(appState === 'generating' || appState === 'complete') && feedback && (
           <div className="mt-8 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
