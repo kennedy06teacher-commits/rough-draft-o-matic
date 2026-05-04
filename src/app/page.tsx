@@ -5,22 +5,21 @@ import StudentPageClient from './StudentPageClient';
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
-  let config: AssignmentConfig | null = null;
-  let debugError = '';
+  let isReady = false;
+  let pdfUrl = '';
 
   try {
     const url = (process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL)?.trim();
     const token = (process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN)?.trim();
-    if (!url || !token) {
-      debugError = `Missing env vars — URL: ${url ? 'set' : 'MISSING'}, TOKEN: ${token ? 'set' : 'MISSING'}`;
-    } else {
+    if (url && token) {
       const redis = new Redis({ url, token });
-      config = await redis.get<AssignmentConfig>('assignment_config');
-      if (!config) debugError = 'Redis returned null for key "assignment_config"';
+      const config = await redis.get<AssignmentConfig>('assignment_config');
+      isReady = !!(config?.prompt?.trim() && config?.rubric?.trim());
+      pdfUrl = config?.assignmentPdfFilename ?? '';
     }
-  } catch (err) {
-    debugError = err instanceof Error ? err.message : String(err);
+  } catch {
+    // isReady stays false
   }
 
-  return <StudentPageClient config={config} debugError={debugError} />;
+  return <StudentPageClient isReady={isReady} pdfUrl={pdfUrl} />;
 }

@@ -3,23 +3,22 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { AssignmentConfig } from '@/types/config';
 
 type AppState = 'form' | 'generating' | 'complete' | 'error';
 
-export default function StudentPageClient({ config, debugError }: { config: AssignmentConfig | null; debugError?: string }) {
+export default function StudentPageClient({ isReady, pdfUrl }: { isReady: boolean; pdfUrl: string }) {
   const [appState, setAppState] = useState<AppState>('form');
   const [studentName, setStudentName] = useState('');
   const [essay, setEssay] = useState('');
   const [feedback, setFeedback] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  if (!config?.prompt?.trim() || !config?.rubric?.trim()) {
+  if (!isReady) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="max-w-md text-center">
           <div className="text-5xl mb-4">📝</div>
-          <h1 className="text-2xl font-bold text-slate-800 mb-2">Not Ready Yet [v2]</h1>
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">Not Ready Yet</h1>
           <p className="text-slate-500">
             Your teacher hasn&apos;t configured the assignment yet. Please check back later or ask
             your teacher to set up the assignment.
@@ -30,16 +29,6 @@ export default function StudentPageClient({ config, debugError }: { config: Assi
           >
             Teacher login →
           </a>
-          {debugError && (
-            <pre className="mt-4 text-left text-xs bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 break-all whitespace-pre-wrap">
-              {debugError}
-            </pre>
-          )}
-          {!debugError && (
-            <pre className="mt-4 text-left text-xs bg-slate-100 rounded-lg p-3 text-slate-500 break-all whitespace-pre-wrap">
-              config: {JSON.stringify(config)}
-            </pre>
-          )}
         </div>
       </div>
     );
@@ -97,9 +86,9 @@ export default function StudentPageClient({ config, debugError }: { config: Assi
         <header className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-indigo-700">Rough Draft-o-Matic</h1>
           <p className="mt-1 text-slate-500">Paste your draft below and get rubric-based feedback</p>
-          {config.assignmentPdfFilename && (
+          {pdfUrl && (
             <a
-              href={config.assignmentPdfFilename}
+              href={pdfUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-3 inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 underline"
