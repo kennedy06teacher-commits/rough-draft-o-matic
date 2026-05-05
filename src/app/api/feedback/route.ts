@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { Redis } from '@upstash/redis';
-import type { AssignmentConfig } from '@/types/config';
+import type { AssignmentConfig, AssignmentsStore } from '@/types/config';
 
-const CONFIG_KEY = 'assignment_config';
+const ASSIGNMENTS_KEY = 'assignments';
 
 function getRedis() {
   const url = (process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL)?.trim();
@@ -15,16 +15,21 @@ function getRedis() {
 const client = new Anthropic();
 
 export async function POST(req: NextRequest) {
-  const { studentName, essay } = await req.json();
+  const { studentName, essay, assignmentId } = await req.json();
 
   if (!studentName?.trim() || !essay?.trim()) {
     return NextResponse.json({ error: 'Name and essay are required.' }, { status: 400 });
   }
 
+  if (!assignmentId?.trim()) {
+    return NextResponse.json({ error: 'Please select an assignment.' }, { status: 400 });
+  }
+
   let config: AssignmentConfig | null = null;
   try {
     const redis = getRedis();
-    config = await redis.get<AssignmentConfig>(CONFIG_KEY);
+    const assignments = await redis.get<AssignmentsStore>(ASSIGNMENTS_KEY);
+    config = assignments?.[assignmentId] ?? null;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: `Failed to load config: ${message}` }, { status: 500 });
@@ -32,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   if (!config?.prompt?.trim() || !config?.rubric?.trim()) {
     return NextResponse.json(
-      { error: 'No assignment configured. Please ask your teacher to set up the assignment.' },
+      { error: 'Assignment not configured. Please ask your teacher to set up the assignment.' },
       { status: 400 }
     );
   }

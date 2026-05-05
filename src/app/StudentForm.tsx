@@ -3,19 +3,25 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { AssignmentOption } from './page';
 
 type AppState = 'form' | 'generating' | 'complete' | 'error';
 
-export default function StudentForm({ pdfUrl }: { pdfUrl: string }) {
+export default function StudentForm({ assignments }: { assignments: Record<string, AssignmentOption> }) {
+  const ids = Object.keys(assignments);
+  const [selectedId, setSelectedId] = useState(ids.length === 1 ? ids[0] : '');
   const [appState, setAppState] = useState<AppState>('form');
   const [studentName, setStudentName] = useState('');
   const [essay, setEssay] = useState('');
   const [feedback, setFeedback] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
+  const selectedAssignment = selectedId ? assignments[selectedId] : null;
+  const pdfUrl = selectedAssignment?.pdfUrl ?? '';
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!studentName.trim() || !essay.trim()) return;
+    if (!studentName.trim() || !essay.trim() || !selectedId) return;
 
     setAppState('generating');
     setFeedback('');
@@ -25,7 +31,7 @@ export default function StudentForm({ pdfUrl }: { pdfUrl: string }) {
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentName, essay }),
+        body: JSON.stringify({ studentName, essay, assignmentId: selectedId }),
       });
 
       if (!res.ok) {
@@ -79,6 +85,27 @@ export default function StudentForm({ pdfUrl }: { pdfUrl: string }) {
 
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
           <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="assignment">
+              Assignment
+            </label>
+            <select
+              id="assignment"
+              value={selectedId}
+              onChange={(e) => setSelectedId(e.target.value)}
+              required
+              disabled={appState === 'generating'}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              {ids.length > 1 && <option value="">Select an assignment…</option>}
+              {ids.map((id) => (
+                <option key={id} value={id}>
+                  {assignments[id].name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="name">
               Your Name
             </label>
@@ -119,7 +146,7 @@ export default function StudentForm({ pdfUrl }: { pdfUrl: string }) {
           {appState !== 'complete' && (
             <button
               type="submit"
-              disabled={appState === 'generating' || !studentName.trim() || !essay.trim()}
+              disabled={appState === 'generating' || !studentName.trim() || !essay.trim() || !selectedId}
               className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-2.5 text-sm transition-colors"
             >
               {appState === 'generating' ? 'Generating feedback…' : 'Get Feedback'}

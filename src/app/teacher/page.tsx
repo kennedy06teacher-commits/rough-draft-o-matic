@@ -1,17 +1,26 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { AssignmentConfig } from '@/types/config';
+import type { AssignmentConfig, AssignmentsStore } from '@/types/config';
 
 const PASSWORD = 'teacher2024';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'assignment';
+}
 
 export default function TeacherPage() {
   const [authed, setAuthed] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
 
+  const [assignments, setAssignments] = useState<AssignmentsStore>({});
+  const [selectedId, setSelectedId] = useState('');
+
+  // Form fields for the selected assignment
+  const [assignmentName, setAssignmentName] = useState('');
   const [prompt, setPrompt] = useState('');
   const [rubric, setRubric] = useState('');
   const [exemplars, setExemplars] = useState<string[]>(['']);
@@ -20,8 +29,11 @@ export default function TeacherPage() {
   const [pdfUploadError, setPdfUploadError] = useState('');
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
-  const [savedConfig, setSavedConfig] = useState<AssignmentConfig | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
+  // New assignment creation
+  const [creatingNew, setCreatingNew] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [createError, setCreateError] = useState('');
+
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,15 +43,39 @@ export default function TeacherPage() {
     setLoading(true);
     fetch('/api/config')
       .then((r) => r.json())
-      .then(({ config }: { config: AssignmentConfig | null }) => {
-        setSavedConfig(config);
-        if (config?.prompt) setPrompt(config.prompt);
-        if (config?.rubric) setRubric(config.rubric);
-        if (config?.exemplars?.length) setExemplars(config.exemplars);
-        if (config?.assignmentPdfFilename) setPdfFilename(config.assignmentPdfFilename);
+      .then(({ assignments: store }: { assignments: AssignmentsStore }) => {
+        const data = store ?? {};
+        setAssignments(data);
+        const ids = Object.keys(data);
+        if (ids.length > 0) populateForm(ids[0], data);
       })
       .finally(() => setLoading(false));
   }, [authed]);
+
+  function populateForm(id: string, store: AssignmentsStore) {
+    setSelectedId(id);
+    const config = store[id];
+    if (config) {
+      setAssignmentName(config.name || id);
+      setPrompt(config.prompt ?? '');
+      setRubric(config.rubric ?? '');
+      setExemplars(config.exemplars?.length ? config.exemplars : ['']);
+      setPdfFilename(config.assignmentPdfFilename ?? '');
+    } else {
+      setAssignmentName('');
+      setPrompt('');
+      setRubric('');
+      setExemplars(['']);
+      setPdfFilename('');
+    }
+    setSaveState('idle');
+    setSaveError('');
+    setPdfUploadError('');
+  }
+
+  function handleSelectAssignment(id: string) {
+    populateForm(id, assignments);
+  }
 
   function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -83,17 +119,26 @@ export default function TeacherPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!selectedId) return;
     setSaveState('saving');
     setSaveError('');
     try {
       const res = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, rubric, exemplars, assignmentPdfFilename: pdfFilename }),
+        body: JSON.stringify({
+          id: selectedId,
+          name: assignmentName || selectedId,
+          prompt,
+          rubric,
+          exemplars,
+          assignmentPdfFilename: pdfFilename,
+        }),
       });
       const data = await res.json();
       if (data.success) {
-        setSavedConfig(data.config);
+        setAssignments((prev) => ({ ...prev, [selectedId]: data.config }));
+        setAssignmentName(data.config.name);
         setSaveState('saved');
         setTimeout(() => setSaveState('idle'), 2500);
       } else {
@@ -106,19 +151,71 @@ export default function TeacherPage() {
     }
   }
 
-  async function handleClear() {
-    if (!confirm('Clear the current assignment config? This cannot be undone.')) return;
+  async function handleCreate() {
+    const name = newName.trim();
+    if (!name) {
+      setCreateError('Please enter a name.');
+      return;
+    }
+    setCreateError('');
+
+    // Generate a unique ID
+    const base = slugify(name);
+    let id = base;
+    let counter = 2;
+    while (assignments[id]) {
+      id = `${base}-${counter}`;
+      counter++;
+    }
+
     try {
-      await fetch('/api/config', { method: 'DELETE' });
-      setPrompt('');
-      setRubric('');
-      setExemplars(['']);
-      setPdfFilename('');
-      setSavedConfig(null);
-      setShowPreview(false);
-      setSaveState('idle');
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name, prompt: '', rubric: '', exemplars: [] }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const updated = { ...assignments, [id]: data.config };
+        setAssignments(updated);
+        populateForm(id, updated);
+        setNewName('');
+        setCreatingNew(false);
+      } else {
+        setCreateError(data.error || 'Failed to create assignment.');
+      }
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to create assignment.');
+    }
+  }
+
+  async function handleDelete() {
+    if (!selectedId) return;
+    const name = assignments[selectedId]?.name || selectedId;
+    if (!confirm(`Delete assignment "${name}"? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/config?id=${encodeURIComponent(selectedId)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        const updated = { ...assignments };
+        delete updated[selectedId];
+        setAssignments(updated);
+        const ids = Object.keys(updated);
+        if (ids.length > 0) {
+          populateForm(ids[0], updated);
+        } else {
+          setSelectedId('');
+          setAssignmentName('');
+          setPrompt('');
+          setRubric('');
+          setExemplars(['']);
+          setPdfFilename('');
+        }
+      } else {
+        alert(data.error || 'Failed to delete assignment.');
+      }
     } catch {
-      alert('Failed to clear config. Please try again.');
+      alert('Failed to delete assignment. Please try again.');
     }
   }
 
@@ -157,13 +254,16 @@ export default function TeacherPage() {
     );
   }
 
+  const assignmentIds = Object.keys(assignments);
+  const hasAssignments = assignmentIds.length > 0;
+
   return (
     <div className="min-h-screen py-10 px-4 bg-slate-50">
       <div className="max-w-2xl mx-auto">
         <header className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-indigo-700">Teacher Config</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Paste in the assignment, rubric, and exemplars</p>
+            <p className="text-sm text-slate-500 mt-0.5">Manage assignments and their rubrics</p>
           </div>
           <button
             onClick={() => setAuthed(false)}
@@ -174,218 +274,254 @@ export default function TeacherPage() {
         </header>
 
         {loading ? (
-          <div className="text-slate-400 text-sm">Loading config...</div>
+          <div className="text-slate-400 text-sm">Loading assignments…</div>
         ) : (
-          <form onSubmit={handleSave} className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="prompt">
-                  Assignment Prompt
-                </label>
-                <p className="text-xs text-slate-400 mb-2">What students are being asked to write.</p>
-                <textarea
-                  id="prompt"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="e.g. Write a 5-paragraph persuasive essay arguing for or against school uniforms..."
-                  rows={5}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="rubric">
-                  Scoring Rubric
-                </label>
-                <p className="text-xs text-slate-400 mb-2">
-                  Paste your full rubric with criteria names and score descriptions.
-                </p>
-                <textarea
-                  id="rubric"
-                  value={rubric}
-                  onChange={(e) => setRubric(e.target.value)}
-                  placeholder="e.g.&#10;Thesis (4 pts): 4 - Clear, arguable thesis... 3 - Thesis present but...&#10;Evidence (4 pts): ..."
-                  rows={8}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
-                />
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-700">Exemplar Responses</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Paste one or more high-quality example responses to help calibrate scoring.
-                </p>
-              </div>
-
-              {exemplars.map((ex, i) => (
-                <div key={i} className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-slate-500">Exemplar {i + 1}</span>
-                    {exemplars.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeExemplar(i)}
-                        className="text-xs text-red-400 hover:text-red-600 transition-colors"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  <textarea
-                    value={ex}
-                    onChange={(e) => updateExemplar(i, e.target.value)}
-                    placeholder={`Paste exemplar response ${i + 1} here...`}
-                    rows={6}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
-                  />
-                </div>
-              ))}
-
-              <button
-                type="button"
-                onClick={addExemplar}
-                className="text-sm text-indigo-600 hover:text-indigo-800 underline transition-colors"
-              >
-                + Add another exemplar
-              </button>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-              <p className="text-sm font-semibold text-slate-700 mb-1">
-                Assignment PDF <span className="font-normal text-slate-400">(optional)</span>
-              </p>
-              <p className="text-xs text-slate-400 mb-3">
-                Upload a PDF and students will see a &ldquo;View Assignment&rdquo; link on the submission page.
-              </p>
+          <>
+            {/* Assignment selector */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-6">
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => pdfInputRef.current?.click()}
-                  disabled={pdfUploading}
-                  className="rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 text-indigo-700 text-sm font-medium px-4 py-2 transition-colors"
-                >
-                  {pdfUploading ? 'Uploading…' : pdfFilename ? 'Replace PDF' : 'Upload PDF'}
-                </button>
-                {pdfFilename && !pdfUploading && (
-                  <span className="text-xs text-slate-500 flex items-center gap-1">
-                    <span>📄</span> {pdfFilename.split('/').pop() ?? pdfFilename}
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                    Assignment
+                  </label>
+                  {hasAssignments ? (
+                    <select
+                      value={selectedId}
+                      onChange={(e) => handleSelectAssignment(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    >
+                      {assignmentIds.map((id) => (
+                        <option key={id} value={id}>
+                          {assignments[id].name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm text-slate-400 py-2">No assignments yet.</p>
+                  )}
+                </div>
+                <div className="flex gap-2 pt-5">
+                  <button
+                    type="button"
+                    onClick={() => { setCreatingNew(true); setNewName(''); setCreateError(''); }}
+                    className="rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-sm font-medium px-3 py-2 transition-colors whitespace-nowrap"
+                  >
+                    + New
+                  </button>
+                  {hasAssignments && selectedId && (
                     <button
                       type="button"
-                      onClick={() => setPdfFilename('')}
-                      className="ml-1 text-slate-300 hover:text-red-400 transition-colors"
-                      aria-label="Remove PDF"
+                      onClick={handleDelete}
+                      className="rounded-lg border border-red-200 text-red-500 hover:bg-red-50 text-sm font-medium px-3 py-2 transition-colors"
                     >
-                      ✕
+                      Delete
                     </button>
-                  </span>
-                )}
-                <input
-                  ref={pdfInputRef}
-                  type="file"
-                  accept="application/pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handlePdfUpload(f);
-                    e.target.value = '';
-                  }}
-                />
+                  )}
+                </div>
               </div>
-              {pdfUploadError && (
-                <p className="mt-2 text-xs text-red-600">{pdfUploadError}</p>
+
+              {creatingNew && (
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                    New Assignment Name
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreate(); } }}
+                      placeholder="e.g. Persuasive Essay Unit 3"
+                      autoFocus
+                      className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreate}
+                      className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 transition-colors"
+                    >
+                      Create
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setCreatingNew(false); setNewName(''); setCreateError(''); }}
+                      className="rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 text-sm px-3 py-2 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {createError && (
+                    <p className="mt-1 text-xs text-red-600">{createError}</p>
+                  )}
+                </div>
               )}
             </div>
 
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={saveState === 'saving'}
-                className="flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-2.5 text-sm transition-colors"
-              >
-                {saveState === 'saving'
-                  ? 'Saving…'
-                  : saveState === 'saved'
-                  ? '✓ Saved!'
-                  : saveState === 'error'
-                  ? 'Error — try again'
-                  : 'Save Configuration'}
-              </button>
-              <button
-                type="button"
-                onClick={handleClear}
-                className="rounded-lg border border-red-200 text-red-500 hover:bg-red-50 font-semibold py-2.5 px-4 text-sm transition-colors"
-              >
-                Clear All
-              </button>
-            </div>
-            {saveState === 'error' && saveError && (
-              <p className="mt-3 rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-xs text-red-700 font-mono break-all">
-                Error: {saveError}
-              </p>
-            )}
-          </form>
-        )}
-
-        {savedConfig && (savedConfig.prompt || savedConfig.rubric) && (
-          <div className="mt-6 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowPreview((v) => !v)}
-              className="w-full flex items-center justify-between px-6 py-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              <span>
-                Currently Saved Configuration
-                {savedConfig.lastUpdated && (
-                  <span className="ml-2 font-normal text-slate-400 text-xs">
-                    (saved {new Date(savedConfig.lastUpdated).toLocaleString()})
-                  </span>
-                )}
-              </span>
-              <span className="text-slate-400">{showPreview ? '▲' : '▼'}</span>
-            </button>
-
-            {showPreview && (
-              <div className="px-6 pb-6 space-y-4 border-t border-slate-100">
-                {savedConfig.prompt && (
+            {/* Assignment config form */}
+            {selectedId ? (
+              <form onSubmit={handleSave} className="space-y-6">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
                   <div>
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-4 mb-1">
+                    <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="assignmentName">
+                      Assignment Name
+                    </label>
+                    <input
+                      id="assignmentName"
+                      type="text"
+                      value={assignmentName}
+                      onChange={(e) => setAssignmentName(e.target.value)}
+                      placeholder="e.g. Persuasive Essay Unit 3"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="prompt">
                       Assignment Prompt
-                    </h3>
-                    <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans bg-slate-50 rounded-lg p-3 border border-slate-100">
-                      {savedConfig.prompt}
-                    </pre>
+                    </label>
+                    <p className="text-xs text-slate-400 mb-2">What students are being asked to write.</p>
+                    <textarea
+                      id="prompt"
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      placeholder="e.g. Write a 5-paragraph persuasive essay arguing for or against school uniforms..."
+                      rows={5}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
+                    />
                   </div>
-                )}
-                {savedConfig.rubric && (
+
                   <div>
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                      Rubric
-                    </h3>
-                    <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans bg-slate-50 rounded-lg p-3 border border-slate-100">
-                      {savedConfig.rubric}
-                    </pre>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="rubric">
+                      Scoring Rubric
+                    </label>
+                    <p className="text-xs text-slate-400 mb-2">
+                      Paste your full rubric with criteria names and score descriptions.
+                    </p>
+                    <textarea
+                      id="rubric"
+                      value={rubric}
+                      onChange={(e) => setRubric(e.target.value)}
+                      placeholder="e.g.&#10;Thesis (4 pts): 4 - Clear, arguable thesis... 3 - Thesis present but...&#10;Evidence (4 pts): ..."
+                      rows={8}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
+                    />
                   </div>
-                )}
-                {savedConfig.exemplars?.filter(Boolean).length > 0 && (
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
                   <div>
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                      Exemplars ({savedConfig.exemplars.filter(Boolean).length})
-                    </h3>
-                    {savedConfig.exemplars.filter(Boolean).map((ex, i) => (
-                      <div key={i} className="mb-2">
-                        <p className="text-xs text-slate-400 mb-1">Exemplar {i + 1}</p>
-                        <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans bg-slate-50 rounded-lg p-3 border border-slate-100">
-                          {ex}
-                        </pre>
+                    <h2 className="text-sm font-semibold text-slate-700">Exemplar Responses</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Paste one or more high-quality example responses to help calibrate scoring.
+                    </p>
+                  </div>
+
+                  {exemplars.map((ex, i) => (
+                    <div key={i} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-slate-500">Exemplar {i + 1}</span>
+                        {exemplars.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeExemplar(i)}
+                            className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        )}
                       </div>
-                    ))}
+                      <textarea
+                        value={ex}
+                        onChange={(e) => updateExemplar(i, e.target.value)}
+                        placeholder={`Paste exemplar response ${i + 1} here...`}
+                        rows={6}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
+                      />
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={addExemplar}
+                    className="text-sm text-indigo-600 hover:text-indigo-800 underline transition-colors"
+                  >
+                    + Add another exemplar
+                  </button>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                  <p className="text-sm font-semibold text-slate-700 mb-1">
+                    Assignment PDF <span className="font-normal text-slate-400">(optional)</span>
+                  </p>
+                  <p className="text-xs text-slate-400 mb-3">
+                    Upload a PDF and students will see a &ldquo;View Assignment&rdquo; link on the submission page.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => pdfInputRef.current?.click()}
+                      disabled={pdfUploading}
+                      className="rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 text-indigo-700 text-sm font-medium px-4 py-2 transition-colors"
+                    >
+                      {pdfUploading ? 'Uploading…' : pdfFilename ? 'Replace PDF' : 'Upload PDF'}
+                    </button>
+                    {pdfFilename && !pdfUploading && (
+                      <span className="text-xs text-slate-500 flex items-center gap-1">
+                        <span>📄</span> {pdfFilename.split('/').pop() ?? pdfFilename}
+                        <button
+                          type="button"
+                          onClick={() => setPdfFilename('')}
+                          className="ml-1 text-slate-300 hover:text-red-400 transition-colors"
+                          aria-label="Remove PDF"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    )}
+                    <input
+                      ref={pdfInputRef}
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handlePdfUpload(f);
+                        e.target.value = '';
+                      }}
+                    />
                   </div>
+                  {pdfUploadError && (
+                    <p className="mt-2 text-xs text-red-600">{pdfUploadError}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={saveState === 'saving'}
+                    className="flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-2.5 text-sm transition-colors"
+                  >
+                    {saveState === 'saving'
+                      ? 'Saving…'
+                      : saveState === 'saved'
+                      ? '✓ Saved!'
+                      : saveState === 'error'
+                      ? 'Error — try again'
+                      : 'Save Configuration'}
+                  </button>
+                </div>
+                {saveState === 'error' && saveError && (
+                  <p className="mt-3 rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-xs text-red-700 font-mono break-all">
+                    Error: {saveError}
+                  </p>
                 )}
+              </form>
+            ) : (
+              <div className="text-center py-12 text-slate-400 text-sm">
+                Create a new assignment to get started.
               </div>
             )}
-          </div>
+          </>
         )}
 
         <div className="mt-6 text-center">
