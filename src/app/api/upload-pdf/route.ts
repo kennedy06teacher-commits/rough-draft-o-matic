@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'BLOB_READ_WRITE_TOKEN is not set.' }, { status: 500 });
     }
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const blob = await put(safeName, file, { access: 'public', token });
+    const blob = await put(safeName, file, { access: 'public', token, allowOverwrite: true });
 
     return NextResponse.json({ filename: blob.url });
   } catch (err) {
